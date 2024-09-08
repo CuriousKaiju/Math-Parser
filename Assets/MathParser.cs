@@ -10,6 +10,8 @@ public class MathParser : MonoBehaviour
 {
     [SerializeField] private List<StatComponent> _componentsList;
     [SerializeField] private List<string> _keyNames;
+    [SerializeField] private List<string> _keyNamesTwinsF;
+    [SerializeField] private List<string> _keyNamesTwinsD;
     [SerializeField] private string _path;
 
     private void Start()
@@ -69,6 +71,75 @@ public class MathParser : MonoBehaviour
 
         Debug.Log("Parsed components count: " + _componentsList.Count);
     }
+    public void ParseFileTwins(string filePath)
+    {
+        string[] lines = File.ReadAllLines(filePath);
+        StatComponent currentStatComponent = null;
+
+        foreach (string line in lines)
+        {
+            // Check if a new section starts and handle ending the current section appropriately
+            if (ShouldStartNewSection(line, currentStatComponent))
+            {
+                currentStatComponent = null;
+            }
+
+            foreach (string key in _keyNames)
+            {
+                if (line.StartsWith(key))
+                {
+                    string sectionType = line.Contains("frequency:") ? " Frequency" : " Distribution";
+                    if (currentStatComponent == null || !currentStatComponent._nameOfTheKey.Equals(key + sectionType))
+                    {
+                        currentStatComponent = new StatComponent(key + sectionType);
+                        _componentsList.Add(currentStatComponent);
+                    }
+                    break;
+                }
+            }
+
+            // Parse data if we are within a valid section
+            if (currentStatComponent != null)
+            {
+                ParseLineData(line, currentStatComponent);
+            }
+        }
+    }
+
+    private bool ShouldStartNewSection(string line, StatComponent current)
+    {
+        if (line.Contains("sum_values") || line.Contains("RTP_") || line.Contains("S_T_D_"))
+        {
+            return true;
+        }
+
+        foreach (string key in _keyNames)
+        {
+            if (line.StartsWith(key) && (line.Contains("frequency:") || line.Contains("distribution:")))
+            {
+                return current == null || !current._nameOfTheKey.StartsWith(key);
+            }
+        }
+        return false;
+    }
+
+    private void ParseLineData(string line, StatComponent currentStatComponent)
+    {
+        if (!line.Contains(":")) return;
+
+        var parts = line.Split(new[] { ':' }, 2);
+        if (parts.Length < 2) return;
+
+        string keyPart = parts[0].Trim();
+        var valueParts = parts[1].Split(new[] { '=' }, 2);
+        if (valueParts.Length < 2) return;
+
+        string valuePart = valueParts[1].Trim().Split(' ')[0].Trim();
+        SimpleValues values = new SimpleValues();
+        values._1_valueList.Add(keyPart);
+        values._3_valueFrequencyList.Add(valuePart);
+        currentStatComponent._valueList.Add(values);
+    }
     public void WriteToCSV()
     {
         StringBuilder sb = new StringBuilder();
@@ -80,7 +151,7 @@ public class MathParser : MonoBehaviour
             sb.AppendLine(component._nameOfTheKey);
 
             // Headers for the columns, placed only once per component
-            //sb.AppendLine("key;value;value_frequency");
+            //sb.AppendLine("key;value_frequency");
 
             // Data for each SimpleValues in the component
             foreach (SimpleValues values in component._valueList)
@@ -91,7 +162,7 @@ public class MathParser : MonoBehaviour
                     string formattedFrequency = values._3_valueFrequencyList[i].ToString().Replace('.', ',');
 
                     // Append each line of data using semicolon as a delimiter
-                    sb.AppendLine($"{values._1_valueList[i]};{values._2_valueList[i]};{formattedFrequency}");
+                    sb.AppendLine($"{values._1_valueList[i]};{formattedFrequency}");
                 }
             }
 
